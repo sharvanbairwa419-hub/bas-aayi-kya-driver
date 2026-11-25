@@ -60,6 +60,18 @@ h1, h2, h3, h4, .font-display, .font-heading {
 .btn-primary:active { transform: scale(.97); }
 .btn-primary:disabled { opacity: .45; box-shadow: none; }
 
+.btn-ghost-dark {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--night-3);
+  color: var(--ink);
+  font-weight: 600;
+  transition: background .2s var(--ease), transform .12s var(--ease);
+}
+.btn-ghost-dark:hover { background: #2B2622; }
+.btn-ghost-dark:active { transform: scale(.97); }
+.btn-ghost-dark:disabled { opacity: .45; }
+
 .field {
   width: 100%;
   background: var(--night-3);

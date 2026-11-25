@@ -56,12 +56,16 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.0-apk
-          name: "Bas Aayi Kya Driver App v1.0 (APK)"
+          name: "Bas Aayi Kya Driver App (APK)"
+          allowUpdates: true
           body: |
-            ### 🚌 Bas Aayi Kya Driver App - Direct Download
-            Download the Android APK directly below to install on your mobile device.
+            ### 🚌 Bas Aayi Kya Driver App — Direct Download
+            Download the Android APK below and install it on the driver's phone.
             - **File:** `app-debug.apk`
             - **Compatibility:** Android 8.0+ (Capacitor 7 + Java 21)
+            - **Login:** the 6-character pairing code given by the bus owner (no OTP)
+            - **Duty:** scan the bus QR to start and to end duty
+            - **Server:** set the owner's server address once in Profile
           files: android/app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
