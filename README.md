@@ -42,7 +42,43 @@ The phone needs to reach the owner's API server.
   It is remembered on the phone. Phone and server must be on the same network.
 
 ## Install (APK)
-Download `app-debug.apk` from the latest release:
-https://github.com/sharvanbairwa419-hub/bas-aayi-kya-driver/releases/tag/v1.0.0-apk
 
-Every push to `main` rebuilds the APK through GitHub Actions and updates that release.
+Download `BasAayiKya-Driver-1.2.0.apk` from the latest release:
+https://github.com/sharvanbairwa419-hub/bas-aayi-kya-driver/releases/latest
+
+Every push to `main` rebuilds the APK through GitHub Actions and publishes it there.
+
+### Why the earlier APK refused to install
+
+The CI signed every build with a **fresh random debug key**, so each download had a
+different signature. Android rejects a package whose signature does not match the
+copy already on the phone — the generic "App not installed" message.
+
+Now `scripts/patch-android.mjs` builds a **release APK signed with one permanent
+keystore** (`keystore/release.p12`, store/key alias `basaayikya`), so every future
+build installs as a normal update.
+
+The same script also declares what the app really needs, which the old build was
+missing:
+
+| Setting | Why |
+| --- | --- |
+| `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` | WebView cannot read GPS without the app holding it |
+| `CAMERA` | QR duty scan |
+| `usesCleartextTraffic="true"` | the owner's server is plain `http://…:3000` |
+| `camera` / `gps` as `required="false"` | installs on phones without those features |
+
+`minSdkVersion` is 24 (Android 7), so Android 9, 10, 11, 12, 13, 14, 15 and 16 all
+install it.
+
+### If Android still blocks the install
+
+1. **Uninstall the old app first** — the old build used a different key, so it can
+   never be updated in place.
+2. Settings → Apps → Special access → **Install unknown apps** → allow the browser
+   or file manager that opened the APK.
+3. Play Protect prompt → **More details** → **Install anyway** (debug-free builds
+   still get scanned once because the app does not come from Play).
+4. Free at least ~200 MB of internal storage.
+5. Still failing? Run `adb install -r BasAayiKya-Driver-1.2.0.apk` and read the
+   `INSTALL_FAILED_*` code — it names the real cause.

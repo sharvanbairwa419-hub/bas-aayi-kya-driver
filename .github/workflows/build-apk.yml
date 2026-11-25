@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+env:
+  VERSION_CODE: 5
+  VERSION_NAME: 1.2.0
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -39,33 +43,52 @@ jobs:
           npx cap add android || true
           npx cap sync android
 
-      - name: Build Android Debug APK
+      - name: Patch Android project (permissions + permanent signing)
+        run: node scripts/patch-android.mjs
+
+      - name: Build signed release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Upload Downloadable APK Artifact
+      - name: Verify APK signature and SDK levels
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          ls -l "$APK"
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BUILD_TOOLS"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|uses-permission" || true
+          mkdir -p out
+          cp "$APK" "out/BasAayiKya-Driver-${VERSION_NAME}.apk"
+          sha256sum "out/BasAayiKya-Driver-${VERSION_NAME}.apk" | tee out/sha256.txt
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: BasAayiKya-Driver-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: out/BasAayiKya-Driver-${{ env.VERSION_NAME }}.apk
 
-      - name: Create GitHub Release with Direct APK
+      - name: Create GitHub Release with direct APK
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0-apk
-          name: "Bas Aayi Kya Driver App (APK)"
+          tag_name: v${{ env.VERSION_NAME }}-apk
+          name: "Bas Aayi Kya Driver v${{ env.VERSION_NAME }}"
           allowUpdates: true
           body: |
-            ### 🚌 Bas Aayi Kya Driver App — Direct Download
-            Download the Android APK below and install it on the driver's phone.
-            - **File:** `app-debug.apk`
-            - **Compatibility:** Android 8.0+ (Capacitor 7 + Java 21)
-            - **Login:** the 6-character pairing code given by the bus owner (no OTP)
-            - **Duty:** scan the bus QR to start and to end duty
-            - **Server:** set the owner's server address once in Profile
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+            ### 🚌 Bas Aayi Kya Driver App — direct download
+
+            **File:** `BasAayiKya-Driver-${{ env.VERSION_NAME }}.apk`
+            **Android:** 7.0 (API 24) aur usse upar — 9, 10, 11, 12, 13, 14, 15, 16 sab par install hota hai
+            **Signature:** permanent release key (har build par same — update install chalega)
+
+            Install karne se pehle purani app uninstall kar dein (purana build alag key se signed tha).
+
+            - **Login:** owner ka diya 6-character pairing code (koi OTP nahi)
+            - **Duty:** bus ka QR scan karke start/end
+            - **Server:** Profile me owner ke server ka address ek baar daalein
+          files: out/BasAayiKya-Driver-${{ env.VERSION_NAME }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
