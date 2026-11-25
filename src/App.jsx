@@ -8,7 +8,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = `${window.location.protocol}//${window.location.hostname || 'localhost'}:3000/api`;
 
 // Route Waypoints for Demo (Jaipur to Kota)
 const ROUTE_WAYPOINTS = [
@@ -23,22 +23,24 @@ const ROUTE_WAYPOINTS = [
   { name: 'Kota Railway Station', lat: 25.2138, lng: 75.8648 }
 ];
 
-// Custom Bus Marker
+// Custom Bus Marker (Google Maps Style)
 const createDriverBusMarker = (isTracking) => {
   return L.divIcon({
     className: 'driver-bus-icon',
     html: `
-      <div style="position: relative; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;">
-        ${isTracking ? '<div style="position: absolute; inset: 0; border-radius: 50%; background: #10B981; opacity: 0.4; animation: pulse-ring 2s infinite;"></div>' : ''}
-        <div style="position: relative; z-index: 10; width: 36px; height: 36px; border-radius: 50%; background: #070B14; border: 2.5px solid #10B981; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(16,185,129,0.5);">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+        <div style="background: #2563EB; color: #FFFFFF; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); display: flex; align-items: center; gap: 4px; border: 2px solid #FFFFFF;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M8 6v6"></path><path d="M15 6v6"></path><path d="M2 12h19.6"></path><path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C18.1 6.8 17.2 6 16.1 6H4c-1.1 0-2.1.8-2.4 1.8l-1.4 5C.1 13.2 0 13.6 0 14c0 .4.1.8.2 1.2.3 1.1.8 2.8.8 2.8h3"></path><circle cx="7" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle>
           </svg>
+          <span>RJ14-AB-1234</span>
+          ${isTracking ? '<span style="width: 6px; height: 6px; border-radius: 50%; background: #4ADE80;"></span>' : ''}
         </div>
+        <div style="width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #2563EB; margin-top: -1px;"></div>
       </div>
     `,
-    iconSize: [48, 48],
-    iconAnchor: [24, 24]
+    iconSize: [110, 36],
+    iconAnchor: [55, 34]
   });
 };
 
@@ -63,7 +65,9 @@ export default function App() {
     bus_number: 'RJ14-AB-1234',
     route_name: 'Jaipur → Kota',
     bus_id: 1,
-    color: 'Blue'
+    color: 'Blue',
+    capacity: 40,
+    license_number: 'RJ14-2018-00912'
   });
 
   // Trip State
@@ -117,14 +121,44 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isTripActive, isOnline, driver.bus_id]);
 
-  // Handle Login
-  const handleLogin = (e) => {
+  // Handle Login (real driver account from backend)
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (loginOtp === '123456') {
-      setIsLoggedIn(true);
-      showToast('Welcome Ramesh Kumar! Shift Ready.');
-    } else {
+    if (loginOtp !== '123456') {
       showToast('Invalid OTP! Use 123456 for demo.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/driver/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: loginPhone, otp: loginOtp })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Login failed. Use a pairing code instead.');
+        return;
+      }
+
+      const d = data.driver || {};
+      setDriver((prev) => ({
+        ...prev,
+        name: d.name || prev.name,
+        phone: d.phone || prev.phone,
+        bus_number: d.bus_number || 'Not paired',
+        route_name: d.route_name || 'No route assigned',
+        bus_id: d.assigned_bus_id || prev.bus_id,
+        capacity: d.capacity || prev.capacity,
+        color: d.color || prev.color,
+        license_number: d.license_number || prev.license_number
+      }));
+      setIsLoggedIn(true);
+      showToast(`Welcome ${d.name || 'Driver'}! Bus ${d.bus_number || 'not assigned yet'}.`);
+    } catch (err) {
+      // Backend offline: keep the demo shift usable
+      setIsLoggedIn(true);
+      showToast('Backend offline — demo shift started (Ramesh Kumar).');
     }
   };
 
@@ -136,7 +170,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/driver/pair`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pairing_code: pairingCodeInput })
+        body: JSON.stringify({ pairing_code: pairingCodeInput, driver_phone: loginPhone })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -144,7 +178,9 @@ export default function App() {
           ...prev,
           bus_number: data.bus.bus_number,
           route_name: data.bus.route_name,
-          bus_id: data.bus.id
+          bus_id: data.bus.id,
+          capacity: data.bus.capacity || prev.capacity,
+          color: data.bus.color || prev.color
         }));
         setIsLoggedIn(true);
         showToast(`Paired to ${data.bus.bus_number}!`);
@@ -204,60 +240,61 @@ export default function App() {
   };
 
   const currentCoords = ROUTE_WAYPOINTS[currentWaypointIndex];
+  const busCapacity = driver.capacity || 40;
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[#02040A] text-[#F0F4FA] font-sans flex flex-col relative pb-20 selection:bg-[#10B981] selection:text-black">
+    <div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] text-slate-900 font-sans flex flex-col relative pb-20 selection:bg-blue-100 selection:text-blue-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 inset-x-4 z-50 p-3.5 bg-[#0F1623] border border-[#10B981]/50 text-white rounded-xl shadow-2xl flex items-center justify-between text-xs font-semibold">
+        <div className="fixed top-4 inset-x-4 z-50 p-3.5 bg-white border border-slate-200 text-slate-800 rounded-xl shadow-xl flex items-center justify-between text-xs font-semibold">
           <span>{toastMessage}</span>
-          <div className="w-2 h-2 rounded-full bg-[#10B981] live-dot" />
+          <div className="w-2 h-2 rounded-full bg-emerald-500 live-dot" />
         </div>
       )}
 
       {/* ---------------- 0. PERMISSIONS SCREEN (PWA FIRST LAUNCH) ---------------- */}
       {showPermissions && (
-        <div className="fixed inset-0 z-50 bg-[#02040A] p-6 flex flex-col justify-between overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-[#F8FAFC] p-6 flex flex-col justify-between overflow-y-auto">
           <div className="space-y-6 pt-6">
-            <div className="w-16 h-16 rounded-2xl bg-[#10B981]/20 border border-[#10B981]/40 flex items-center justify-center text-[#10B981] mx-auto glow-emerald">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 mx-auto">
               <Shield className="w-8 h-8" />
             </div>
 
             <div className="text-center space-y-2">
-              <h1 className="font-heading font-extrabold text-2xl text-white">Driver Permissions Setup</h1>
-              <p className="text-xs text-[#8B95A8] leading-relaxed">
+              <h1 className="font-heading font-extrabold text-2xl text-slate-900">Driver Permissions Setup</h1>
+              <p className="text-xs text-slate-500 leading-relaxed">
                 Bas Aayi Kya driver app needs essential device access to track live buses and alert passengers on time.
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="glass-card p-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#10B981]/20 flex items-center justify-center text-[#10B981] flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
                   <Navigation className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-xs text-white">Precise GPS & Background Location</div>
-                  <div className="text-[11px] text-[#8B95A8]">Jab app background mein ho, tab bhi live location share karne ke liye.</div>
+                  <div className="font-semibold text-xs text-slate-900">Precise GPS & Background Location</div>
+                  <div className="text-[11px] text-slate-500">Jab app background mein ho, tab bhi live location share karne ke liye.</div>
                 </div>
               </div>
 
               <div className="glass-card p-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#6366F1]/20 flex items-center justify-center text-[#6366F1] flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
                   <Camera className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-xs text-white">Camera Access</div>
-                  <div className="text-[11px] text-[#8B95A8]">Bus se jodne ke liye QR code scan karne hetu.</div>
+                  <div className="font-semibold text-xs text-slate-900">Camera Access</div>
+                  <div className="text-[11px] text-slate-500">Bus se jodne ke liye QR code scan karne hetu.</div>
                 </div>
               </div>
 
               <div className="glass-card p-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#F59E0B]/20 flex items-center justify-center text-[#F59E0B] flex-shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
                   <Bell className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-xs text-white">Push Notifications & Wake Lock</div>
-                  <div className="text-[11px] text-[#8B95A8]">Trip updates aur screen ko trip ke dauraan on rakhne ke liye.</div>
+                  <div className="font-semibold text-xs text-slate-900">Push Notifications & Wake Lock</div>
+                  <div className="text-[11px] text-slate-500">Trip updates aur screen ko trip ke dauraan on rakhne ke liye.</div>
                 </div>
               </div>
             </div>
@@ -459,7 +496,7 @@ export default function App() {
                     </div>
                     <div className="bg-[#070B14] p-3 rounded-xl border border-white/5 cursor-pointer hover:border-[#10B981]/50" onClick={() => setCurrentTab('count')}>
                       <div className="text-[10px] text-[#5A6680] uppercase">Passengers</div>
-                      <div className="font-heading font-bold text-sm text-[#10B981] mt-1">{passengerCount}/40</div>
+                      <div className="font-heading font-bold text-sm text-[#10B981] mt-1">{passengerCount}/{busCapacity}</div>
                     </div>
                     <div className="bg-[#070B14] p-3 rounded-xl border border-white/5">
                       <div className="text-[10px] text-[#5A6680] uppercase">Earnings</div>
@@ -517,8 +554,8 @@ export default function App() {
                     zoom={10} 
                     className="w-full h-full">
                     <TileLayer
-                      attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                      attribution='&copy; <a href="https://carto.com/">CARTO Voyager</a>'
+                      url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
                     />
                     <MapRecenter center={[currentCoords.lat, currentCoords.lng]} />
                     <Polyline 
@@ -571,7 +608,7 @@ export default function App() {
                   <div className="font-heading font-extrabold text-7xl text-white tracking-tight">
                     {passengerCount}
                   </div>
-                  <div className="text-xs text-[#8B95A8] mt-1">/ 40 Seats Occupied</div>
+                  <div className="text-xs text-[#8B95A8] mt-1">/ {busCapacity} Seats Occupied</div>
                 </div>
 
                 {/* Stepper Buttons */}
@@ -582,7 +619,7 @@ export default function App() {
                     -
                   </button>
                   <button 
-                    onClick={() => setPassengerCount(Math.min(40, passengerCount + 1))}
+                    onClick={() => setPassengerCount(Math.min(busCapacity, passengerCount + 1))}
                     className="w-16 h-16 rounded-2xl bg-[#10B981] text-2xl font-bold text-[#02040A] hover:bg-[#0ea371] transition btn-tactile glow-emerald">
                     +
                   </button>
@@ -592,19 +629,19 @@ export default function App() {
                 <div className="space-y-1 text-left">
                   <div className="flex justify-between text-xs text-[#8B95A8]">
                     <span>Occupancy Rate</span>
-                    <span className="text-white font-semibold">{Math.round((passengerCount / 40) * 100)}%</span>
+                    <span className="text-white font-semibold">{Math.round((passengerCount / busCapacity) * 100)}%</span>
                   </div>
                   <div className="w-full h-3 rounded-full bg-[#070B14] overflow-hidden p-0.5 border border-white/5">
                     <div 
                       className="h-full bg-gradient-to-r from-[#10B981] to-[#F59E0B] rounded-full transition-all duration-300" 
-                      style={{ width: `${(passengerCount / 40) * 100}%` }} 
+                      style={{ width: `${(passengerCount / busCapacity) * 100}%` }} 
                     />
                   </div>
                 </div>
 
                 {/* 40 Seats Mini Grid */}
                 <div className="grid grid-cols-8 gap-1.5 pt-2">
-                  {Array.from({ length: 40 }).map((_, i) => (
+                  {Array.from({ length: busCapacity }).map((_, i) => (
                     <div 
                       key={i} 
                       className={`h-4 rounded-sm text-[8px] flex items-center justify-center font-bold ${
@@ -701,7 +738,7 @@ export default function App() {
                   </div>
                   <div className="p-3 bg-[#070B14] rounded-xl flex justify-between">
                     <span className="text-[#8B95A8]">Commercial License</span>
-                    <span className="text-white font-mono">RJ14-2018-00912</span>
+                    <span className="text-white font-mono">{driver.license_number || 'RJ14-2018-00912'}</span>
                   </div>
                   <div className="p-3 bg-[#070B14] rounded-xl flex justify-between">
                     <span className="text-[#8B95A8]">Operator Agency</span>

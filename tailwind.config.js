@@ -7,24 +7,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        dark: {
-          950: '#060B08', // Deep Charcoal-Mint tint
-          900: '#0C1510',
-          850: '#121F17',
-          800: '#1B2D22',
-          700: '#284232',
+        brand: {
+          50: '#EFF6FF',
+          100: '#DBEAFE',
+          200: '#BFDBFE',
+          500: '#3B82F6',
+          600: '#2563EB',
+          700: '#1D4ED8',
         },
-        driver: {
-          neon: '#00FF9D', // Vivid Neon Mint
-          emerald: '#10B981',
-          cyan: '#06B6D4',
-          danger: '#FF3366', // Hot Coral Red
-          amber: '#FFB800',
+        surface: {
+          50: '#F8FAFC',
+          100: '#F1F5F9',
+          200: '#E2E8F0',
+          300: '#CBD5E1',
         }
       },
       fontFamily: {
-        outfit: ['Outfit', 'sans-serif'],
-        inter: ['Inter', 'sans-serif'],
+        sans: ['Inter', 'sans-serif'],
+        heading: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
       },
     },
   },
