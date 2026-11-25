@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -42,8 +45,23 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload Downloadable APK
+      - name: Upload Downloadable APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BasAayiKya-Driver-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create GitHub Release with Direct APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-apk
+          name: "Bas Aayi Kya Driver App v1.0 (APK)"
+          body: |
+            ### 🚌 Bas Aayi Kya Driver App - Direct Download
+            Download the Android APK directly below to install on your mobile device.
+            - **File:** `app-debug.apk`
+            - **Compatibility:** Android 8.0+ (Capacitor 7 + Java 21)
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
