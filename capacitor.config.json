@@ -1,0 +1,8 @@
+{
+  "appId": "com.basaayikya.driver",
+  "appName": "Bas Aayi Kya Driver",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
