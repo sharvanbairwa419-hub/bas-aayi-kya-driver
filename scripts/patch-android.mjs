@@ -12,8 +12,8 @@ const root = process.cwd();
 const manifestPath = path.join(root, 'android/app/src/main/AndroidManifest.xml');
 const gradlePath = path.join(root, 'android/app/build.gradle');
 
-const VERSION_CODE = 5;
-const VERSION_NAME = '1.2.0';
+const VERSION_CODE = 6;
+const VERSION_NAME = '1.3.0';
 const KEYSTORE = 'release.p12';
 const KEY_ALIAS = 'basaayikya';
 const KEY_PASSWORD = 'BasAayiKya2026';
@@ -85,6 +85,11 @@ if (!gradle.includes('signingConfigs')) {
             storePassword '${KEY_PASSWORD}'
             keyAlias '${KEY_ALIAS}'
             keyPassword '${KEY_PASSWORD}'
+            // Sign with all three schemes so new AND old installers accept the APK.
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+            enableV4Signing false
         }
     }
 
