@@ -61,6 +61,13 @@ const busPin = L.divIcon({
   iconAnchor: [10, 10],
 });
 
+const passengerPin = L.divIcon({
+  className: 'bak-passenger-pin',
+  html: `<div style="width:22px;height:22px;border-radius:50%;background:#0B5D57;border:3px solid #F5EFE6;box-shadow:0 0 0 2px #0B5D57"></div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
 function Follow({ position }) {
   const map = useMap();
   useEffect(() => { if (position) map.setView(position, map.getZoom() < 12 ? 14 : map.getZoom()); }, [position?.[0], position?.[1]]);
@@ -71,6 +78,9 @@ function Follow({ position }) {
 function PairScreen({ onReady }) {
   const [code, setCode] = useState('');
   const [server, setServer] = useState(localStorage.getItem('bak_api') || DEFAULT_API);
+  const [hails, setHails] = useState([]);
+  const [accepted, setAccepted] = useState(null);
+  const [hailBusy, setHailBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -247,6 +257,9 @@ export default function App() {
   const [trips, setTrips] = useState([]);
   const [toast, setToast] = useState('');
   const [server, setServer] = useState(localStorage.getItem('bak_api') || DEFAULT_API);
+  const [hails, setHails] = useState([]);
+  const [accepted, setAccepted] = useState(null);
+  const [hailBusy, setHailBusy] = useState(false);
   const fixRef = useRef(null);
   const dutyIdRef = useRef(null);
 
@@ -322,6 +335,39 @@ export default function App() {
     const id = setInterval(push, 10000);
     return () => { alive = false; clearInterval(id); };
   }, [duty?.id, token, load]);
+
+  // ---- pickup requests: nearest passenger on this route ----
+  useEffect(() => {
+    if (!duty || !token) { setHails([]); return; }
+    let alive = true;
+    const pull = async () => {
+      try {
+        const list = await api('/api/driver/hails', { token });
+        if (alive) setHails(list || []);
+      } catch (err) { if (err.status === 401) logout(); }
+    };
+    pull();
+    const id = setInterval(pull, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, [duty?.id, token]);
+
+  async function answerHail(hail, accept) {
+    setHailBusy(true);
+    try {
+      if (accept) {
+        const res = await api(`/api/driver/hails/${hail.id}/accept`, { method: 'POST', token });
+        setAccepted(res.hail);
+        flash('Pickup accept हो गया — passenger आपका इंतज़ार कर रहा है.');
+      } else {
+        await api(`/api/driver/hails/${hail.id}/reject`, { method: 'POST', token });
+        flash('Request आगे भेज दी — कोई और driver लेगा.');
+      }
+      setHails((prev) => prev.filter((h) => h.id !== hail.id));
+    } catch (err) {
+      flash(err.message);
+      if (err.status === 409) setHails((prev) => prev.filter((h) => h.id !== hail.id));
+    } finally { setHailBusy(false); }
+  }
 
   useEffect(() => {
     if (tab !== 'trips' || !token) return;
@@ -483,9 +529,31 @@ export default function App() {
                       <Follow position={position} />
                       {trail.length > 1 && <Polyline positions={trail} pathOptions={{ color: '#EF6A1E', weight: 4 }} />}
                       {position && <Marker position={position} icon={busPin} />}
+                      {accepted?.at && <Marker position={[accepted.at.lat, accepted.at.lng]} icon={passengerPin} />}
                     </MapContainer>
                   </div>
                 </div>
+
+                {accepted && (
+                  <div className="card p-4 border-teal/50">
+                    <div className="flex items-center justify-between">
+                      <p className="font-display text-base">Passenger आपका इंतज़ार कर रहा है</p>
+                      <button onClick={() => setAccepted(null)} className="text-xs text-muted">हो गया</button>
+                    </div>
+                    <p className="text-sm text-ink-2 mt-1">
+                      {accepted.passenger?.name || 'Passenger'}
+                      {accepted.route?.from || accepted.route?.to ? ` · ${accepted.route.from || '—'} → ${accepted.route.to || '—'}` : ''}
+                    </p>
+                    <p className="text-xs text-muted mt-1">
+                      नीले pin पर passenger खड़ा है{fix ? ` · आपसे ${Math.max(1, Math.round((((fix.lat - accepted.at.lat) ** 2 + (fix.lng - accepted.at.lng) ** 2) ** 0.5) * 111 * 10)) / 10} km` : ''}
+                    </p>
+                    {accepted.passenger?.phone && (
+                      <a href={`tel:${accepted.passenger.phone}`} className="btn-ghost-dark w-full py-2.5 text-xs mt-3 inline-flex items-center justify-center gap-2">
+                        <Phone size={13} /> {accepted.passenger.phone}
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 <button onClick={() => setScanMode('end')} className="w-full rounded-2xl border border-chili/40 bg-chili/10 text-chili py-4 font-semibold inline-flex items-center justify-center gap-2 press">
                   <Square size={16} /> Duty खत्म करें — bus QR scan
@@ -599,6 +667,37 @@ export default function App() {
           onCode={handleScan}
           onClose={() => setScanMode(null)}
         />
+      )}
+
+      {hails.length > 0 && !accepted && (
+        <div className="fixed inset-0 z-[560] bg-night/70 backdrop-blur-sm flex items-end">
+          <div className="w-full bg-night-2 rounded-t-sheet p-5 safe-bottom animate-slide-in">
+            <div className="flex items-center gap-2 text-marigold text-xs font-semibold uppercase tracking-widest">
+              <MapPin size={13} /> आगे passenger खड़ा है
+            </div>
+            <p className="font-display text-2xl mt-2">Pickup request</p>
+            <p className="text-sm text-muted mt-1">
+              {hails[0].passenger?.name || 'Passenger'}
+              {hails[0].route?.from || hails[0].route?.to ? ` · ${hails[0].route.from || '—'} → ${hails[0].route.to || '—'}` : ''}
+            </p>
+            {hails[0].bus?.distance_km != null && (
+              <p className="text-sm text-ink-2 mt-2">
+                आपसे <span className="font-semibold num">{hails[0].bus.distance_km} km</span> दूर · लगभग {hails[0].bus.eta_min} min
+              </p>
+            )}
+            <p className="text-[11.5px] text-muted mt-2">Accept करेंगे तो passenger को आपकी live location दिखेगी. 75 सेकंड में जवाब दें, वरना request अगले driver को चली जाएगी.</p>
+            <div className="grid grid-cols-2 gap-2.5 mt-4">
+              <button onClick={() => answerHail(hails[0], false)} disabled={hailBusy}
+                className="rounded-2xl border border-line py-4 font-semibold press inline-flex items-center justify-center gap-2">
+                <X size={16} /> Skip
+              </button>
+              <button onClick={() => answerHail(hails[0], true)} disabled={hailBusy}
+                className="btn-primary py-4 inline-flex items-center justify-center gap-2">
+                <Check size={16} /> Accept
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {sosOpen && (
