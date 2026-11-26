@@ -12,8 +12,8 @@ const root = process.cwd();
 const manifestPath = path.join(root, 'android/app/src/main/AndroidManifest.xml');
 const gradlePath = path.join(root, 'android/app/build.gradle');
 
-const VERSION_CODE = 6;
-const VERSION_NAME = '1.3.0';
+const VERSION_CODE = 7;
+const VERSION_NAME = '1.4.0';
 const KEYSTORE = 'release.p12';
 const KEY_ALIAS = 'basaayikya';
 const KEY_PASSWORD = 'BasAayiKya2026';
